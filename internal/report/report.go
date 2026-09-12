@@ -150,6 +150,13 @@ func reportMutatorType(m mutator.Mutator, rep *reportStatus) {
 	}
 }
 
+// judgedAny reports whether a test run decided the fate of at least one
+// mutant. A run whose every mutant was skipped (for example a diff that
+// touches no mutable line) or not viable has nothing to measure.
+func (r *reportStatus) judgedAny() bool {
+	return r.killed+r.lived+r.notCovered+r.timedOut > 0
+}
+
 func (*reportStatus) isDryRun() bool {
 	return configuration.Get[bool](configuration.UnleashDryRunKey)
 }
@@ -228,6 +235,11 @@ func (r *reportStatus) fullRunReport() {
 
 func (r *reportStatus) assess(tEfficacy, rCoverage float64) error {
 	if r.isDryRun() {
+		return nil
+	}
+	if !r.judgedAny() {
+		log.Infoln("No mutant was judged, so the thresholds do not apply.")
+
 		return nil
 	}
 

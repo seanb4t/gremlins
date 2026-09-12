@@ -292,6 +292,44 @@ func TestAssessment(t *testing.T) {
 	}
 }
 
+// A run whose every mutant was skipped judged nothing, so no threshold can
+// fail it: a diff-scoped run over lines that carry no mutant exits 0.
+func TestAssessmentJudgedNothing(t *testing.T) {
+	log.Init(&bytes.Buffer{}, &bytes.Buffer{})
+	defer log.Reset()
+
+	viper.Set(configuration.UnleashThresholdEfficacyKey, float64(85))
+	viper.Set(configuration.UnleashThresholdMCoverageKey, float64(80))
+	defer viper.Reset()
+
+	mutants := []mutator.Mutator{
+		stubMutant{status: mutator.Skipped, mutantType: mutator.ConditionalsNegation, position: fakePosition},
+		stubMutant{status: mutator.NotViable, mutantType: mutator.ConditionalsNegation, position: fakePosition},
+	}
+
+	if err := report.Do(report.Results{Mutants: mutants, Elapsed: time.Second}); err != nil {
+		t.Fatalf("expected no error when nothing was judged, got %v", err)
+	}
+}
+
+// A run whose only mutants timed out was judged, and fails the thresholds
+// like any run with no kill.
+func TestAssessmentTimedOutIsJudged(t *testing.T) {
+	log.Init(&bytes.Buffer{}, &bytes.Buffer{})
+	defer log.Reset()
+
+	viper.Set(configuration.UnleashThresholdEfficacyKey, float64(85))
+	defer viper.Reset()
+
+	mutants := []mutator.Mutator{
+		stubMutant{status: mutator.TimedOut, mutantType: mutator.ConditionalsNegation, position: fakePosition},
+	}
+
+	if err := report.Do(report.Results{Mutants: mutants, Elapsed: time.Second}); err == nil {
+		t.Fatal("expected the efficacy threshold to fail a run of timed-out mutants")
+	}
+}
+
 func TestMutantNoDiff(t *testing.T) {
 	t.Run("does not print diff even when snippets are non-empty", func(t *testing.T) {
 		out := &bytes.Buffer{}

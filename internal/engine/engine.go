@@ -200,11 +200,21 @@ func (mu *Engine) mutationStatus(set *token.FileSet, pos token.Pos, parents []as
 		status = mutator.Runnable
 	}
 
-	if !mu.codeData.Diff.IsChanged(position) {
+	if !mu.codeData.Diff.IsChanged(mu.fromModuleRoot(position)) {
 		status = mutator.Skipped
 	}
 
 	return status
+}
+
+// fromModuleRoot names the position's file from the module root, with
+// forward slashes, which is how git diff names it. The parser names a file
+// from the directory the engine walks, so under a run on a sub-directory the
+// two differ by that directory.
+func (mu *Engine) fromModuleRoot(position token.Position) token.Position {
+	position.Filename = normalisePkgPath(filepath.Join(mu.module.CallingDir, position.Filename))
+
+	return position
 }
 
 func (mu *Engine) isRunnableBySyntax(set *token.FileSet, pos token.Pos, parents []ast.Node) bool {

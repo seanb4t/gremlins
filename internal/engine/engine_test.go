@@ -684,6 +684,51 @@ func TestSkipNotDiffMutants(t *testing.T) {
 	}
 }
 
+func TestDiffMatchesFilesFromModuleRootOnSubDirectoryRun(t *testing.T) {
+	t.Parallel()
+	f, _ := os.Open("testdata/fixtures/geq_go")
+	file, _ := io.ReadAll(f)
+
+	sys := fstest.MapFS{
+		"file.go": {Data: file},
+	}
+	mod := gomodule.GoModule{
+		Name:       "example.com",
+		Root:       ".",
+		CallingDir: "pkg/sub",
+	}
+	viperSet(map[string]any{configuration.UnleashDryRunKey: true})
+	defer viperReset()
+
+	// git diff names the file from the module root; the engine walks pkg/sub
+	// and the parser names it file.go. A diff that covers every line of the
+	// root-relative name must keep the mutants, and one that names only the
+	// walked name must skip them. No coverage is loaded, so a kept mutant is
+	// not covered rather than runnable.
+	for _, tc := range []struct {
+		name string
+		diff diff.Diff
+		want mutator.Status
+	}{
+		{name: "root-relative name keeps", diff: diff.Diff{"pkg/sub/file.go": {{StartLine: 1, EndLine: 1000}}}, want: mutator.NotCovered},
+		{name: "walked name only skips", diff: diff.Diff{"file.go": {{StartLine: 1, EndLine: 1000}}}, want: mutator.Skipped},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mut := engine.New(mod, engine.CodeData{Diff: tc.diff}, newJobDealerStub(t), engine.WithDirFs(sys))
+			res := mut.Run(context.Background())
+
+			if len(res.Mutants) == 0 {
+				t.Fatal("should receive mutants")
+			}
+			for _, mutant := range res.Mutants {
+				if mutant.Status() != tc.want {
+					t.Errorf("mutant %v = %s, want %s", mutant.Position(), mutant.Status(), tc.want)
+				}
+			}
+		})
+	}
+}
+
 func TestStopsOnCancel(t *testing.T) {
 	mapFS, mod, c := loadFixture(defaultFixture, ".")
 	defer c()

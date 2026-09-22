@@ -18,6 +18,7 @@
 package workdir
 
 import (
+	"errors"
 	"io"
 	"io/fs"
 	"os"
@@ -123,6 +124,11 @@ func (cd *CachedDealer) setCache(idf, folder string) {
 
 func (cd *CachedDealer) copyTo(dstDir string) func(srcPath string, info fs.FileInfo, err error) error {
 	return func(srcPath string, info fs.FileInfo, err error) error {
+		if errors.Is(err, fs.ErrNotExist) && srcPath != cd.srcDir {
+			// A concurrent writer, such as git holding .git/index.lock,
+			// removed the path between the directory read and its stat.
+			return nil
+		}
 		if err != nil {
 			return err
 		}
@@ -146,7 +152,7 @@ func copyPath(srcPath, dstPath string, info fs.FileInfo) error {
 			return err
 		}
 	case mode.IsRegular():
-		if err := doCopy(srcPath, dstPath, mode); err != nil {
+		if err := doCopy(srcPath, dstPath, mode); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
 	}

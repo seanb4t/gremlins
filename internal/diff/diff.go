@@ -35,16 +35,23 @@ func newChanges(file *gitdiff.File) (FileName, []Change) {
 	var changes []Change
 
 	for _, fragment := range file.TextFragments {
-		if fragment.LinesAdded == 0 {
-			continue
+		line := int(fragment.NewPosition)
+
+		for _, l := range fragment.Lines {
+			if l.Op == gitdiff.OpDelete {
+				continue
+			}
+
+			if l.Op == gitdiff.OpAdd {
+				if n := len(changes); n > 0 && changes[n-1].EndLine == line-1 {
+					changes[n-1].EndLine = line
+				} else {
+					changes = append(changes, Change{StartLine: line, EndLine: line})
+				}
+			}
+
+			line++
 		}
-
-		startLine := int(fragment.NewPosition + fragment.LeadingContext)
-
-		changes = append(changes, Change{
-			StartLine: startLine,
-			EndLine:   startLine + int(fragment.LinesAdded-1),
-		})
 	}
 
 	return FileName(file.NewName), changes

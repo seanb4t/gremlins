@@ -121,6 +121,46 @@ func Test_newChanges(t *testing.T) {
 	}
 }
 
+func Test_newChanges_interleavedHunk(t *testing.T) {
+	// new-file lines 10-12 context, 13 added, 14-15 context, 16 replaces a
+	// deleted line, 17 context, 18-19 added, 20 context
+	var lines []gitdiff.Line
+	lines = append(lines, opLines(gitdiff.OpContext, 3)...)
+	lines = append(lines, opLines(gitdiff.OpAdd, 1)...)
+	lines = append(lines, opLines(gitdiff.OpContext, 2)...)
+	lines = append(lines, opLines(gitdiff.OpDelete, 1)...)
+	lines = append(lines, opLines(gitdiff.OpAdd, 1)...)
+	lines = append(lines, opLines(gitdiff.OpContext, 1)...)
+	lines = append(lines, opLines(gitdiff.OpAdd, 2)...)
+	lines = append(lines, opLines(gitdiff.OpContext, 1)...)
+
+	file := &gitdiff.File{
+		NewName: "test",
+		TextFragments: []*gitdiff.TextFragment{{
+			NewPosition:     10,
+			LinesAdded:      4,
+			LinesDeleted:    1,
+			LeadingContext:  3,
+			TrailingContext: 1,
+			Lines:           lines,
+		}},
+	}
+
+	expect := []Change{
+		{StartLine: 13, EndLine: 13},
+		{StartLine: 16, EndLine: 16},
+		{StartLine: 18, EndLine: 19},
+	}
+
+	_, changes := newChanges(file)
+
+	if !reflect.DeepEqual(changes, expect) {
+		t.Log("want", expect)
+		t.Log("got", changes)
+		t.Fatalf("unexpected newChanges result")
+	}
+}
+
 func fragment(startLine int, adds int, del ...int) *gitdiff.TextFragment {
 	const contexts = 4
 

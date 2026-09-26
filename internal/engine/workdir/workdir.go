@@ -139,6 +139,12 @@ func (cd *CachedDealer) copyTo(dstDir string) func(srcPath string, info fs.FileI
 		if relPath == "." {
 			return nil
 		}
+		if info.Mode().IsRegular() && info.Name() == ".git" {
+			// A linked worktree or a submodule names its repository in a
+			// .git file. A copy that keeps the file runs git against that
+			// repository, so a mutant's git write would reach it.
+			return nil
+		}
 		dstPath := filepath.Join(dstDir, relPath)
 
 		return copyPath(srcPath, dstPath, info)

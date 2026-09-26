@@ -327,3 +327,57 @@ func getFileBytes() []byte {
 
 	return b
 }
+
+func TestCopyLeavesOutGitdirPointerFiles(t *testing.T) {
+	srcDir := t.TempDir()
+	pointer := []byte("gitdir: /elsewhere/.git/worktrees/linked\n")
+	if err := os.WriteFile(filepath.Join(srcDir, ".git"), pointer, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(srcDir, "sub"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "sub", ".git"), pointer, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "sub", "a.go"), []byte("package sub\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	dealer := workdir.NewCachedDealer(t.TempDir(), srcDir)
+	defer dealer.Clean()
+	dstDir, err := dealer.Get("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, rel := range []string{".git", filepath.Join("sub", ".git")} {
+		if _, err := os.Lstat(filepath.Join(dstDir, rel)); !os.IsNotExist(err) {
+			t.Errorf("expected %s to be left out of the copy, got err %v", rel, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dstDir, "sub", "a.go")); err != nil {
+		t.Errorf("expected sub/a.go to be copied, got %v", err)
+	}
+}
+
+func TestCopyKeepsAGitDirectory(t *testing.T) {
+	srcDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(srcDir, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	dealer := workdir.NewCachedDealer(t.TempDir(), srcDir)
+	defer dealer.Clean()
+	dstDir, err := dealer.Get("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dstDir, ".git", "HEAD")); err != nil {
+		t.Errorf("expected .git/HEAD to be copied, got %v", err)
+	}
+}

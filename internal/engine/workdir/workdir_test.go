@@ -361,12 +361,15 @@ func TestCopyLeavesOutGitdirPointerFiles(t *testing.T) {
 	}
 }
 
-func TestCopyKeepsAGitDirectory(t *testing.T) {
+func TestCopyLeavesOutAGitDirectory(t *testing.T) {
 	srcDir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(srcDir, ".git"), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(srcDir, ".git", "objects"), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(srcDir, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "a.go"), []byte("package a\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
@@ -377,7 +380,10 @@ func TestCopyKeepsAGitDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := os.Stat(filepath.Join(dstDir, ".git", "HEAD")); err != nil {
-		t.Errorf("expected .git/HEAD to be copied, got %v", err)
+	if _, err := os.Lstat(filepath.Join(dstDir, ".git")); !os.IsNotExist(err) {
+		t.Errorf("expected .git to be left out of the copy, got err %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dstDir, "a.go")); err != nil {
+		t.Errorf("expected a.go to be copied, got %v", err)
 	}
 }
